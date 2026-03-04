@@ -368,7 +368,9 @@ const UI = {
     nfSub: "NeuroFlow — a deep work system designed for YOUR brain type. Coming soon.",
     nfBtn: "Join the Waitlist →",
     refFooter: "CognoType™ — Based on peer-reviewed neuroscience research\nDimensions informed by: Corbetta & Shulman (2002), Vogel & Machizawa (2004), Baron-Cohen E-S Theory, and more.",
-    shareText: (name, emoji, subtitle) => `I'm ${name} ${emoji} — ${subtitle}. Discover your brain type → cognotype.vercel.app`,
+    shareText: (name, emoji, subtitle, url) => `I'm ${name} ${emoji} — ${subtitle}. Discover your brain type → ${url}`,
+    tryTest: "Take the Test Yourself →",
+    friendResult: "'s CognoType Result",
     copied: "Copied to clipboard!",
     dimLabels: { "Laser":"Laser", "Lantern":"Lantern", "Balanced":"Balanced", "Lark":"Lark", "Third Bird":"Third Bird", "Owl":"Owl", "Depth":"Depth", "Breadth":"Breadth", "Driver":"Driver", "Steady":"Steady", "Mobilize":"Mobilize", "Freeze":"Freeze", "Withdraw":"Withdraw", "Empath":"Empath", "Systemizer":"Systemizer" },
     dimDisplayNames: { attnLabel:"Attention", rhythmLabel:"Rhythm", memLabel:"Memory", rewLabel:"Drive", stressLabel:"Stress", socLabel:"Social" },
@@ -401,7 +403,9 @@ const UI = {
     nfSub: "NeuroFlow —— 为你的大脑类型量身设计的深度工作系统，即将上线。",
     nfBtn: "加入等待名单 →",
     refFooter: "CognoType™ —— 基于经过同行评审的神经科学研究\n维度框架参考：Corbetta & Shulman (2002)、Vogel & Machizawa (2004)、Baron-Cohen E-S 理论等",
-    shareText: (name, emoji, subtitle) => `我是${name} ${emoji}——${subtitle}。来发现你的大脑类型 → cognotype.vercel.app`,
+    shareText: (name, emoji, subtitle, url) => `我是${name} ${emoji}——${subtitle}。来发现你的大脑类型 → ${url}`,
+    tryTest: "我也来测一测 →",
+    friendResult: "的 CognoType 结果",
     copied: "已复制到剪贴板！",
     dimLabels: { "Laser":"聚焦型", "Lantern":"发散型", "Balanced":"均衡型", "Lark":"早鸟型", "Third Bird":"中间型", "Owl":"夜猫型", "Depth":"深度型", "Breadth":"广度型", "Driver":"驱动型", "Steady":"稳定型", "Mobilize":"激活型", "Freeze":"冻结型", "Withdraw":"退缩型", "Empath":"共情导向", "Systemizer":"系统导向" },
     dimDisplayNames: { attnLabel:"注意力", rhythmLabel:"节律", memLabel:"记忆", rewLabel:"驱动力", stressLabel:"压力", socLabel:"社交" },
@@ -512,6 +516,26 @@ function LangSwitch({ lang, setLang }) {
 }
 
 // ============================================================
+// Share URL helpers
+function encodeResult(typeKey, dims) {
+  const d = [dims.attnLabel, dims.rhythmLabel, dims.memLabel, dims.rewLabel, dims.stressLabel, dims.socLabel].map(v => v.charAt(0)).join("");
+  return btoa(typeKey + "|" + d);
+}
+function decodeResult(code) {
+  try {
+    const decoded = atob(code);
+    const [typeKey, dStr] = decoded.split("|");
+    if (!typeKey || !dStr || dStr.length !== 6) return null;
+    const labelMap = {L:"Laser",A:"Lantern",B:"Balanced",K:"Lark",T:"Third Bird",O:"Owl",D:"Depth",R:"Breadth",V:"Driver",S:"Steady",M:"Mobilize",F:"Freeze",W:"Withdraw",E:"Empath",Y:"Systemizer"};
+    const chars = dStr.split("");
+    const dims = { attnLabel: labelMap[chars[0]]||"Balanced", rhythmLabel: labelMap[chars[1]]||"Third Bird", memLabel: labelMap[chars[2]]||"Balanced", rewLabel: labelMap[chars[3]]||"Balanced", stressLabel: labelMap[chars[4]]||"Mobilize", socLabel: labelMap[chars[5]]||"Balanced" };
+    if (!COGNOTYPES[typeKey]) return null;
+    const scores = {attention:18,memory:18,reward:18,social:18};
+    const radarValues = [scores.attention, dims.rhythmLabel==="Lark"?25:dims.rhythmLabel==="Owl"?10:18, scores.memory, scores.reward, dims.stressLabel==="Mobilize"?25:dims.stressLabel==="Freeze"?10:15, scores.social];
+    return { scores, rhythm:{}, stress:{}, dims, typeKey, type: COGNOTYPES[typeKey], radarValues };
+  } catch(e) { return null; }
+}
+
 // MAIN APP
 // ============================================================
 export default function CognoTypeApp() {
@@ -523,12 +547,21 @@ export default function CognoTypeApp() {
   const [email, setEmail] = useState("");
   const [emailSubmitted, setEmailSubmitted] = useState(false);
   const [fade, setFade] = useState(true);
+  const [isSharedView, setIsSharedView] = useState(false);
 
-  // Auto-detect Chinese browser
+  // Auto-detect language + check for shared result URL
   useEffect(() => {
     if (typeof navigator !== "undefined") {
       const browserLang = navigator.language || "";
       if (browserLang.startsWith("zh")) setLang("zh");
+    }
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get("r");
+      if (code) {
+        const shared = decodeResult(code);
+        if (shared) { setResult(shared); setScreen("result"); setIsSharedView(true); }
+      }
     }
   }, []);
 
@@ -542,7 +575,7 @@ export default function CognoTypeApp() {
     const newAns = [...answers]; newAns[qIndex] = val; setAnswers(newAns);
     setTimeout(() => { setFade(false); setTimeout(() => {
       if (qIndex < 35) setQIndex(qIndex + 1);
-      else { setResult(computeResults(newAns)); setScreen("result"); }
+      else { const r=computeResults(newAns); setResult(r); setScreen("result"); if(typeof window!=="undefined"){const code=encodeResult(r.typeKey,r.dims);window.history.replaceState({},"",window.location.pathname+"?r="+code);} }
       setFade(true);
     }, 250); }, 300);
   };
@@ -565,8 +598,8 @@ export default function CognoTypeApp() {
           {L.dims.map((d,i)=>(<span key={i} style={{padding:"6px 14px",borderRadius:20,background:"rgba(168,85,247,0.1)",border:"1px solid rgba(168,85,247,0.2)",fontSize:12,color:"rgba(255,255,255,0.6)"}}>{d}</span>))}
         </div>
         <button onClick={()=>setScreen("quiz")} style={{padding:"16px 48px",fontSize:17,fontWeight:600,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"inherit",background:"linear-gradient(135deg,#7C3AED,#6366F1)",color:"white",boxShadow:"0 4px 24px rgba(99,102,241,0.4)",transition:"transform 0.2s,box-shadow 0.2s"}}
-          onMouseEnter={e=>{const el=e.target as HTMLElement;el.style.transform="translateY(-2px)";el.style.boxShadow="0 6px 32px rgba(99,102,241,0.5)";}}
-          onMouseLeave={e=>{const el=e.target as HTMLElement;el.style.transform="";el.style.boxShadow="0 4px 24px rgba(99,102,241,0.4)";}}>
+          onMouseEnter={e=>{e.target.style.transform="translateY(-2px)";e.target.style.boxShadow="0 6px 32px rgba(99,102,241,0.5)";}}
+          onMouseLeave={e=>{e.target.style.transform="";e.target.style.boxShadow="0 4px 24px rgba(99,102,241,0.4)";}}>
           {L.startBtn}
         </button>
         <p style={{fontSize:11,color:"rgba(255,255,255,0.3)",marginTop:20}}>{L.footer}</p>
@@ -635,9 +668,12 @@ export default function CognoTypeApp() {
             {tFree.split("\n\n").map((p,i)=>(<p key={i} style={{fontSize:15,lineHeight:1.8,color:"rgba(255,255,255,0.7)",margin:"0 0 16px"}}>{p}</p>))}
           </div>
 
-          <div style={{display:"flex",gap:12,justifyContent:"center",marginBottom:32}}>
-            <button onClick={()=>{const text=L.shareText(tName,tp.emoji,tSub);if(navigator.share)navigator.share({text});else if(navigator.clipboard){navigator.clipboard.writeText(text);alert(L.copied);}}} style={{padding:"12px 28px",borderRadius:12,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.05)",color:"rgba(255,255,255,0.8)",cursor:"pointer",fontSize:14,fontFamily:"inherit"}}>{L.shareBtn}</button>
-            <button onClick={()=>{setScreen("quiz");setQIndex(0);setAnswers(Array(36).fill(null));setResult(null);}} style={{padding:"12px 28px",borderRadius:12,border:"1px solid rgba(255,255,255,0.1)",background:"transparent",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:14,fontFamily:"inherit"}}>{L.retakeBtn}</button>
+          <div style={{display:"flex",gap:12,justifyContent:"center",marginBottom:32,flexWrap:"wrap"}}>
+            <button onClick={()=>{const code=encodeResult(result.typeKey,dims);const base=typeof window!=="undefined"?window.location.origin+window.location.pathname:"";const shareUrl=base+"?r="+code;const text=L.shareText(tName,tp.emoji,tSub,shareUrl);if(navigator.share)navigator.share({text,url:shareUrl});else if(navigator.clipboard){navigator.clipboard.writeText(text);alert(L.copied);}}} style={{padding:"12px 28px",borderRadius:12,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.05)",color:"rgba(255,255,255,0.8)",cursor:"pointer",fontSize:14,fontFamily:"inherit"}}>{L.shareBtn}</button>
+            {isSharedView && (
+              <button onClick={()=>{if(typeof window!=="undefined"){window.history.replaceState({},"",window.location.pathname);}setIsSharedView(false);setScreen("landing");setResult(null);setQIndex(0);setAnswers(Array(36).fill(null));}} style={{padding:"12px 28px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#7C3AED,#6366F1)",color:"white",cursor:"pointer",fontSize:14,fontWeight:600,fontFamily:"inherit",boxShadow:"0 4px 24px rgba(99,102,241,0.3)"}}>{L.tryTest}</button>
+            )}
+            <button onClick={()=>{setScreen("quiz");setQIndex(0);setAnswers(Array(36).fill(null));setResult(null);if(typeof window!=="undefined")window.history.replaceState({},"",window.location.pathname);setIsSharedView(false);}} style={{padding:"12px 28px",borderRadius:12,border:"1px solid rgba(255,255,255,0.1)",background:"transparent",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:14,fontFamily:"inherit"}}>{L.retakeBtn}</button>
           </div>
 
           {/* Blurred Report + Email */}
